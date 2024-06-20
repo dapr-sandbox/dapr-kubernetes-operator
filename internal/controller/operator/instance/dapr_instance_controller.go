@@ -20,6 +20,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/dapr-sandbox/dapr-kubernetes-operator/pkg/controller/reconciler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/dapr-sandbox/dapr-kubernetes-operator/pkg/openshift"
 
 	"github.com/dapr-sandbox/dapr-kubernetes-operator/pkg/helm"
@@ -159,9 +162,19 @@ func (r *Reconciler) init(ctx context.Context) error {
 		c = b
 	}
 
-	objRec := reconcile.AsReconciler[*daprApi.DaprInstance](r.manager.GetClient(), r)
+	// by default, the controller expect the DaprControlPlane resource to be created
+	// in the same namespace where it runs, if not fallback to the default namespace
+	rec := reconciler.BaseReconciler[*daprApi.DaprInstance]{
+		Delegate:        r,
+		Client:          r.client,
+		Log:             log.FromContext(ctx),
+		Name:            DaprInstanceResourceName,
+		Namespace:       controller.OperatorNamespace(),
+		FinalizerName:   DaprInstanceFinalizerName,
+		FinalizerAction: r.Cleanup,
+	}
 
-	ct, err := c.Build(objRec)
+	ct, err := c.Build(&rec)
 	if err != nil {
 		return fmt.Errorf("failure building the application controller for DaprInstance resource: %w", err)
 	}
